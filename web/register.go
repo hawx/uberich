@@ -81,13 +81,13 @@ func Register(whitelist []string, db data.Database, mailer *Mailer) http.Handler
 
 			if !whitelisted {
 				// Flash user not allowed
-				log.Println("User not whitelisted:", user)
+				log.Println("register: not whitelisted", user)
 				return
 			}
 
-			if _, ok := db.Get(user); ok {
+			if _, err := db.GetUser(user); err != nil {
 				// Flash already registered
-				log.Println("User already registered:", user)
+				log.Println("register:", err)
 				return
 			}
 
@@ -96,7 +96,7 @@ func Register(whitelist []string, db data.Database, mailer *Mailer) http.Handler
 				token   = uuid.NewRandom().String()
 			)
 
-			db.Set(data.Record{
+			db.SetUser(data.User{
 				Email:    user,
 				Hash:     string(hash),
 				Token:    token,

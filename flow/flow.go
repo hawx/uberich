@@ -7,6 +7,9 @@
 package flow
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"log"
 	"net/http"
 	"net/url"
 
@@ -42,18 +45,29 @@ func (s emailStore) Set(w http.ResponseWriter, r *http.Request, email string) {
 	session.Save(r, w)
 }
 
-func Client(uberichURL string, store Store) *client {
+func Client(application, uberichURL, secret string, store Store) *client {
 	u, _ := url.Parse(uberichURL)
 
 	return &client{
-		uberichURL: u,
-		store:      store,
+		application: application,
+		uberichURL:  u,
+		secret:      secret,
+		store:       store,
 	}
 }
 
 type client struct {
-	uberichURL *url.URL
-	store      Store
+	application string
+	uberichURL  *url.URL
+	secret      string
+	store       Store
+}
+
+func (c *client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
+	mac := hmac.New(sha256.New, []byte(c.secret))
+	mac.Write(data)
+	expectedMAC := mac.Sum(nil)
+	return hmac.Equal(verifyMAC, expectedMAC)
 }
 
 // signInURI is the the path to this handler, redirectURI is the path to
@@ -61,6 +75,12 @@ type client struct {
 func (c *client) SignIn(signInURI, redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := r.FormValue("email"); email != "" {
+			verifyMAC := r.FormValue("verify")
+			if !c.wasHashedWithSecret([]byte(email), []byte(verifyMAC)) {
+				log.Println("sign-in: response from unverified source")
+				return
+			}
+
 			c.store.Set(w, r, email)
 			http.Redirect(w, r, redirectURI, http.StatusFound)
 			return
@@ -69,6 +89,7 @@ func (c *client) SignIn(signInURI, redirectURI string) http.Handler {
 		u, _ := c.uberichURL.Parse("login")
 		q := u.Query()
 		q.Add("redirect_uri", signInURI)
+		q.Add("application", c.application)
 		u.RawQuery = q.Encode()
 
 		http.Redirect(w, r, u.String(), http.StatusFound)

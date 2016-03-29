@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/context"
 	uberich "hawx.me/code/uberich/flow"
 )
 
@@ -36,12 +37,12 @@ func Secret(w http.ResponseWriter, r *http.Request) {
 func main() {
 	store := uberich.NewStore("COOKIE-SECRETSZ")
 
-	uberich := uberich.Client("http://localhost:8000", store)
+	uberich := uberich.Client("testapp", "http://uberich.dev", "thisissecret", store)
 
 	http.HandleFunc("/", Index)
 	http.Handle("/secret", uberich.Protect(http.HandlerFunc(Secret)))
 	http.Handle("/sign-in", uberich.SignIn("http://localhost:3001/sign-in", "/secret"))
 	http.Handle("/sign-out", uberich.SignOut("/"))
 
-	http.ListenAndServe(":3001", nil)
+	http.ListenAndServe(":3001", context.ClearHandler(http.DefaultServeMux))
 }

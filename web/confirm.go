@@ -47,9 +47,9 @@ func Confirm(db data.Database) http.Handler {
 			return
 		}
 
-		record, ok := db.Get(email)
-		if !ok {
-			log.Println("confirm: not found for", email)
+		record, err := db.GetUser(email)
+		if err != nil {
+			log.Println("confirm:", err)
 			http.NotFound(w, r)
 			return
 		}
@@ -67,6 +67,6 @@ func Confirm(db data.Database) http.Handler {
 		}
 
 		record.Verified = true
-		db.Set(record)
+		db.SetUser(record)
 	})
 }

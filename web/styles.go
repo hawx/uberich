@@ -12,6 +12,7 @@ body {
 }
 
 label {
+    display: inline-block;
     width: 5rem;
     text-align: right;
     margin-right: 1rem;
@@ -32,8 +33,7 @@ input[type=text], input[type=password] {
 
 input[type=submit] {
     font-family: monospace;
-    width: 5rem;
-    margin-left: 15rem;
+    margin-left: 7rem;
     border: 1px solid;
     background: none;
 }

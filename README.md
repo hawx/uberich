@@ -11,22 +11,67 @@ for Persona.
 I am not using this at the moment, and neither should you.
 
 
+## Set-up
+
+A TOML settings file is required with the following:
+
+```TOML
+# a list of whitelisted users
+users = ["a@example.com", "b@example.com", ...]
+
+# registration email sender settings
+[mail]
+addr = "mail.example.org:25"
+user = "admin@example.org"
+pass = "mySecretPassword"
+from = "registrations@example.org"
+```
+
+The applications that will request logins must also be registered, this can be
+done with the `uberich-applications` tool:
+
+```bash
+$ go get hawx.me/code/uberich/cmd/uberich-applications
+$ uberich-applications set my-app http://example.com someSharedSecret
+...
+```
+
+Now `my-app` can integrate with uberich using the `flow` package.
+
+```go
+import (
+  "github.com/gorilla/context"
+  uberich "hawx.me/code/uberich/flow"
+)
+
+func main() {
+  store := uberich.NewStore("cookieSecret")
+  uberich := uberich.Client("my-app", "http://uberich.example.com", "someSharedSecret", store)
+
+  http.Handle("/secret-data", uberich.Protect(SecretHandler))
+  http.Handle("/sign-in", uberich.SignIn("http://example.com/sign-in", "/secret-data"))
+  http.Handle("/sign-out", uberich.SignOut("/")
+
+  http.ListenAndServe(":8080", context.ClearHandler(http.DefaultServeMux))
+}
+```
+
+
 ## Flow
 
 The authentication flow is for an application (`https://app`) using an uberich
 authentication server (`https://uberich`):
 
 1. User visits `https://app` and requests secret data.
-2. `https://app` redirects the user to `https://uberich/login`.
+
+2. `https://app` redirects the user to `https://uberich/login`, passing the
+   `application` and `redirect_uri` query parameters.
+
 3. User logs in using their registered details.
-4. `https://uberich` redirects to the URI given by `https://app` with the email
-   in the query string.
-5. `https://app` sets a cookie with the User's email address for later
+
+4. `https://uberich` redirects to `redirect_uri` with the `email` and `verify`
+   query parameters.
+
+5. `https://app` checks the `verify` parameter contains `email` hashed with the
+   shared secret, then sets a cookie with the User's email address for later
    reference.
-
-### Things missing
-
-- Hard for `https://app` to know the redirect was from
-  `https://uberich`. Applications should be registered with uberich so that some
-  shared data can be used to HMAC the email. Then `https://app` can be sent this
-  with the email and calculate the HMAC itself to confirm.

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/gorilla/sessions"
 	"github.com/justinas/nosurf"
 	"golang.org/x/crypto/bcrypt"
 	"hawx.me/code/uberich/data"
@@ -22,8 +21,8 @@ const loginPage = `<!DOCTYPE html>
   <body>
     <form method="post" action="/login">
       <fieldset>
-        <label for="user">Username</label>
-        <input type="text" id="user" name="user" />
+        <label for="email">Email</label>
+        <input type="text" id="email" name="email" />
       </fieldset>
 
       <fieldset>
@@ -31,6 +30,7 @@ const loginPage = `<!DOCTYPE html>
         <input type="password" id="pass" name="pass" />
       </fieldset>
 
+      <input type="hidden" name="application" value="{{.Application}}" />
       <input type="hidden" name="csrf_token" value="{{.Token}}" />
       <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}" />
 
@@ -42,14 +42,16 @@ const loginPage = `<!DOCTYPE html>
 var loginTmpl = template.Must(template.New("login").Parse(loginPage))
 
 type loginCtx struct {
+	Application string
 	Token       string
 	RedirectURI string
 }
 
-func Login(db data.Database, store *sessions.CookieStore) http.Handler {
+func Login(db data.Database) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			loginTmpl.Execute(w, loginCtx{
+				Application: r.FormValue("application"),
 				Token:       nosurf.Token(r),
 				RedirectURI: r.FormValue("redirect_uri"),
 			})
@@ -57,27 +59,42 @@ func Login(db data.Database, store *sessions.CookieStore) http.Handler {
 		}
 
 		if r.Method == "POST" {
-			user := r.PostFormValue("user")
-			pass := r.PostFormValue("pass")
+			var (
+				email          = r.PostFormValue("email")
+				pass           = r.PostFormValue("pass")
+				application    = r.PostFormValue("application")
+				redirectURI, _ = url.Parse(r.PostFormValue("redirect_uri"))
+			)
 
-			record, ok := db.Get(user)
-			if !ok {
-				log.Println("login: no such user")
+			user, err := db.GetUser(email)
+			if err != nil {
+				log.Println("login:", email, err)
+				return
+			}
+			if !user.Verified {
+				log.Println("login: user not verified")
 				return
 			}
 
-			if err := bcrypt.CompareHashAndPassword([]byte(record.Hash), []byte(pass)); err != nil {
+			app, err := db.GetApplication(application)
+			if err != nil {
+				log.Println("login:", err)
+				return
+			}
+
+			if !app.CanRedirectTo(redirectURI.String()) {
+				log.Println("login: cannot redirect to specified URI:", redirectURI.String())
+				return
+			}
+
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(pass)); err != nil {
 				log.Println("login: password incorrect")
 				return
 			}
 
-			session, _ := store.Get(r, "user")
-			session.Values["email"] = user
-			session.Save(r, w)
-
-			redirectURI, _ := url.Parse(r.PostFormValue("redirect_uri"))
 			query := redirectURI.Query()
-			query.Add("email", user)
+			query.Add("email", email)
+			query.Add("verify", string(app.HashWithSecret([]byte(email))))
 			redirectURI.RawQuery = query.Encode()
 
 			http.Redirect(w, r, redirectURI.String(), http.StatusFound)
