@@ -52,6 +52,9 @@ type registerCtx struct {
 	Token string
 }
 
+// Register handles the initial step of adding new users. If the user is allowed
+// to register they are sent an email containing a token that is checked by
+// Confirm.
 func Register(whitelist []string, db data.Database, mailer *Mailer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {

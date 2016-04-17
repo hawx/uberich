@@ -35,6 +35,9 @@ const confirmPage = `<!DOCTYPE html>
 
 var confirmTmpl = template.Must(template.New("register").Parse(registerPage))
 
+// Confirm handles the final step of registering users. It is visited via a link
+// sent to the user's email which contains a token. If the token matches that
+// set on the user, verified is set to true.
 func Confirm(db data.Database) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var (

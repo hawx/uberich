@@ -11,6 +11,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
+// User is a record storing all data for an individual user.
 type User struct {
 	Email    string
 	Hash     string
@@ -19,16 +20,20 @@ type User struct {
 	Verified bool
 }
 
+// Application is a record storing all data for an application.
 type Application struct {
 	Name    string
 	RootURI string
 	Secret  string
 }
 
+// CanRedirectTo checks whether the Application can issue a HTTP redirect to the
+// given URI by checking if it shares the same root URI.
 func (a Application) CanRedirectTo(uri string) bool {
 	return strings.HasPrefix(uri, a.RootURI)
 }
 
+// HashWithSecret returns a HMAC using the secret for the Application.
 func (a Application) HashWithSecret(data []byte) []byte {
 	mac := hmac.New(sha256.New, []byte(a.Secret))
 	mac.Write(data)

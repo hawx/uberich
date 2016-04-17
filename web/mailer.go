@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// Mailer is responsible for any email communications that need to be sent.
 type Mailer struct {
 	addr string
 	auth smtp.Auth

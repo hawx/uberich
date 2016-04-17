@@ -47,6 +47,8 @@ type loginCtx struct {
 	RedirectURI string
 }
 
+// Login handles requests for a user to verify their identity. It displays and
+// handles a standard login form.
 func Login(db data.Database) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
