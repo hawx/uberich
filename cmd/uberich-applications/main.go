@@ -4,25 +4,28 @@ import (
 	"flag"
 	"fmt"
 
-	"hawx.me/code/uberich/data"
+	"golang.org/x/crypto/bcrypt"
+
+	"hawx.me/code/uberich/config"
 )
 
 var (
-	dbPath = flag.String("database", "./uberich.db", "")
+	settingsPath = flag.String("settings", "./settings.toml", "")
 )
 
-const usage = `Usage: uberich-applications COMMAND
+const usage = `Usage: uberich-admin COMMAND
 
   Administration tool for uberich.
 
-    list
-        Lists all registered applications
+  Commands:
 
-    set NAME ROOTURI SECRET
-        Adds/updates an application
+    list-apps
+    set-app NAME ROOTURI SECRET
+    remove-app NAME
 
-    remove NAME
-        Removes an application
+    list-users
+    set-user EMAIL PASSWORD
+    remove-user EMAIL
 `
 
 func main() {
@@ -34,60 +37,96 @@ func main() {
 		return
 	}
 
-	db, err := data.Open(*dbPath)
+	conf, err := config.Read(*settingsPath)
 	if err != nil {
-		fmt.Println("db:", err)
+		fmt.Println("config:", err)
 		return
 	}
-	defer db.Close()
 
 	switch flag.Arg(0) {
-	case "list":
-		apps, err := db.ListApplications()
-		if err != nil {
-			fmt.Println("list:", err)
-			return
+	case "list-apps":
+		for _, app := range conf.Apps {
+			fmt.Printf("%s uri=%s secret=%s\n", app.Name, app.URI, app.Secret)
 		}
 
-		for _, app := range apps {
-			printApplication(app)
-		}
-	case "set":
+	case "set-app":
 		if len(flag.Args()) < 4 {
-			fmt.Println("set: missing required arguments")
+			fmt.Println("set-app: missing required arguments")
 			return
 		}
 
-		app := data.Application{
-			Name:    flag.Arg(1),
-			RootURI: flag.Arg(2),
-			Secret:  flag.Arg(3),
+		app := &config.App{
+			Name:   flag.Arg(1),
+			URI:    flag.Arg(2),
+			Secret: flag.Arg(3),
 		}
 
-		err := db.SetApplication(app)
-		if err != nil {
-			fmt.Println("set:", err)
+		conf.SetApp(app)
+
+		if err := conf.Save(); err != nil {
+			fmt.Println("set-app:", err)
 			return
 		}
-		printApplication(app)
 
-	case "remove":
+		fmt.Printf("%s uri=%s secret=%s\n", app.Name, app.URI, app.Secret)
+
+	case "remove-app":
 		if len(flag.Args()) < 2 {
 			fmt.Println("remove: missing required argument")
 			return
 		}
 
-		err := db.RemoveApplication(flag.Arg(1))
+		conf.RemoveApp(flag.Arg(1))
+
+		if err := conf.Save(); err != nil {
+			fmt.Println("remove-app:", err)
+			return
+		}
+	case "list-users":
+		for _, user := range conf.Users {
+			fmt.Printf("%s\n", user.Email)
+		}
+
+	case "set-user":
+		if len(flag.Args()) < 3 {
+			fmt.Println("set-user: missing required arguments")
+			return
+		}
+
+		pass, err := bcrypt.GenerateFromPassword([]byte(flag.Arg(2)), -1)
 		if err != nil {
-			fmt.Println("remove:", err)
+			fmt.Println("set-user:", err)
+			return
+		}
+
+		user := &config.User{
+			Email: flag.Arg(1),
+			Hash:  string(pass),
+		}
+
+		conf.SetUser(user)
+
+		if err := conf.Save(); err != nil {
+			fmt.Println("set-user:", err)
+			return
+		}
+
+		fmt.Printf("%s\n", user.Email)
+
+	case "remove-user":
+		if len(flag.Args()) < 2 {
+			fmt.Println("remove-user: missing required argument")
+			return
+		}
+
+		conf.RemoveUser(flag.Arg(1))
+
+		if err := conf.Save(); err != nil {
+			fmt.Println("remove-user:", err)
 			return
 		}
 
 	default:
 		fmt.Print(usage)
 	}
-}
-
-func printApplication(app data.Application) {
-	fmt.Printf("%s\trootURI=%s\tsecret=%s\n", app.Name, app.RootURI, app.Secret)
 }

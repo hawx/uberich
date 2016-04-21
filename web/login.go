@@ -8,7 +8,7 @@ import (
 
 	"github.com/justinas/nosurf"
 	"golang.org/x/crypto/bcrypt"
-	"hawx.me/code/uberich/data"
+	"hawx.me/code/uberich/config"
 )
 
 const loginPage = `<!DOCTYPE html>
@@ -49,7 +49,7 @@ type loginCtx struct {
 
 // Login handles requests for a user to verify their identity. It displays and
 // handles a standard login form.
-func Login(db data.Database) http.Handler {
+func Login(conf *config.Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			loginTmpl.Execute(w, loginCtx{
@@ -68,19 +68,15 @@ func Login(db data.Database) http.Handler {
 				redirectURI, _ = url.Parse(r.PostFormValue("redirect_uri"))
 			)
 
-			user, err := db.GetUser(email)
-			if err != nil {
-				log.Println("login:", email, err)
-				return
-			}
-			if !user.Verified {
-				log.Println("login: user not verified")
+			user := conf.GetUser(email)
+			if user == nil {
+				log.Println("login: no such user", email)
 				return
 			}
 
-			app, err := db.GetApplication(application)
-			if err != nil {
-				log.Println("login:", err)
+			app := conf.GetApp(application)
+			if app == nil {
+				log.Println("login: no such app", application)
 				return
 			}
 

@@ -8,7 +8,25 @@ import (
 const styles = `
 body {
     margin: 3rem;
-    font-family: monospace;
+    font: 16px/1.3 monospace;
+    width: 27rem;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #eee;
+    width: 15rem;
+    margin: 4rem auto;
+}
+
+h1 {
+    font-size: 1em;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+ul {
+    list-style: circle;
 }
 
 label {
