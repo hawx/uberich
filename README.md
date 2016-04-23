@@ -13,30 +13,20 @@ I am not using this at the moment, and neither should you.
 
 ## Set-up
 
-A TOML settings file is required with the following:
-
-```TOML
-# a list of whitelisted users
-users = ["a@example.com", "b@example.com", ...]
-
-# registration email sender settings
-[mail]
-addr = "mail.example.org:25"
-user = "admin@example.org"
-pass = "mySecretPassword"
-from = "registrations@example.org"
+```bash
+$ go get hawx.me/code/uberich/...
 ```
 
-The applications that will request logins must also be registered, this can be
-done with the `uberich-applications` tool:
+Use `uberich-admin` to add users and apps.
 
 ```bash
-$ go get hawx.me/code/uberich/cmd/uberich-applications
-$ uberich-applications set my-app http://example.com someSharedSecret
+$ uberich-admin set-user someone@example.com secretPassword
+$ uberich-admin set-app testApp http://test.example.com sharedSecret
+$ uberich
 ...
 ```
 
-Now `my-app` can integrate with uberich using the `flow` package.
+Now `testApp` can integrate with uberich using the `flow` package.
 
 ```go
 import (
@@ -46,10 +36,10 @@ import (
 
 func main() {
   store := uberich.NewStore("cookieSecret")
-  uberich := uberich.Client("my-app", "http://uberich.example.com", "someSharedSecret", store)
+  uberich := uberich.Client("testApp", "http://uberich.example.com", "sharedSecret", store)
 
   http.Handle("/secret-data", uberich.Protect(SecretHandler))
-  http.Handle("/sign-in", uberich.SignIn("http://example.com/sign-in", "/secret-data"))
+  http.Handle("/sign-in", uberich.SignIn("http://test.example.com/sign-in", "/secret-data"))
   http.Handle("/sign-out", uberich.SignOut("/")
 
   http.ListenAndServe(":8080", context.ClearHandler(http.DefaultServeMux))
