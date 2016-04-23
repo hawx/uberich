@@ -14,8 +14,8 @@ func Read(path string) (*Config, error) {
 
 type Config struct {
 	path  string
-	Apps  []*App  `toml:"apps"`
-	Users []*User `toml:"users"`
+	Apps  []*App  `toml:"app"`
+	Users []*User `toml:"user"`
 }
 
 func (c *Config) GetApp(name string) *App {

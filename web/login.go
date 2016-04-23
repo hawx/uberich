@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/justinas/nosurf"
-	"golang.org/x/crypto/bcrypt"
 	"hawx.me/code/uberich/config"
 )
 
@@ -19,6 +18,10 @@ const loginPage = `<!DOCTYPE html>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    {{ if .WasProblem }}
+      <p class="problem">Try again!</p>
+    {{ end }}
+
     <form method="post" action="/login">
       <fieldset>
         <label for="email">Email</label>
@@ -45,6 +48,7 @@ type loginCtx struct {
 	Application string
 	Token       string
 	RedirectURI string
+	WasProblem  bool
 }
 
 // Login handles requests for a user to verify their identity. It displays and
@@ -56,6 +60,7 @@ func Login(conf *config.Config) http.Handler {
 				Application: r.FormValue("application"),
 				Token:       nosurf.Token(r),
 				RedirectURI: r.FormValue("redirect_uri"),
+				WasProblem:  r.FormValue("problem") != "",
 			})
 			return
 		}
@@ -68,25 +73,40 @@ func Login(conf *config.Config) http.Handler {
 				redirectURI, _ = url.Parse(r.PostFormValue("redirect_uri"))
 			)
 
+			redirectHere := func() {
+				here := r.URL
+				query := url.Values{}
+				query.Add("application", application)
+				query.Add("redirect_uri", redirectURI.String())
+				query.Add("problem", "yes")
+				here.RawQuery = query.Encode()
+
+				http.Redirect(w, r, here.String(), http.StatusFound)
+			}
+
 			user := conf.GetUser(email)
 			if user == nil {
 				log.Println("login: no such user", email)
+				redirectHere()
 				return
 			}
 
 			app := conf.GetApp(application)
 			if app == nil {
 				log.Println("login: no such app", application)
+				http.Error(w, "no such app", http.StatusInternalServerError)
 				return
 			}
 
 			if !app.CanRedirectTo(redirectURI.String()) {
 				log.Println("login: cannot redirect to specified URI:", redirectURI.String())
+				http.Error(w, "cannot redirect to URI", http.StatusInternalServerError)
 				return
 			}
 
-			if err := bcrypt.CompareHashAndPassword([]byte(user.Hash), []byte(pass)); err != nil {
-				log.Println("login: password incorrect")
+			if !user.IsPassword(pass) {
+				log.Println("login: password incorrect", email)
+				redirectHere()
 				return
 			}
 

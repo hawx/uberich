@@ -55,6 +55,14 @@ input[type=submit] {
     border: 1px solid;
     background: none;
 }
+
+.problem {
+    color: rgb(164, 34, 34);
+    border: 1px dashed;
+    padding: 1rem;
+    margin: 0 0 2rem;
+    display: inline-block;
+}
 `
 
 var Styles = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
