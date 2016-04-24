@@ -8,6 +8,7 @@ import (
 
 	"github.com/justinas/nosurf"
 	"hawx.me/code/uberich/config"
+	"hawx.me/code/uberich/cookies"
 )
 
 const loginPage = `<!DOCTYPE html>
@@ -53,14 +54,59 @@ type loginCtx struct {
 
 // Login handles requests for a user to verify their identity. It displays and
 // handles a standard login form.
-func Login(conf *config.Config) http.Handler {
+func Login(conf *config.Config, store *cookies.Store) http.Handler {
+	getApp := func(w http.ResponseWriter, r *http.Request, name, redirectURI string) *config.App {
+		app := conf.GetApp(name)
+
+		if app == nil {
+			log.Println("login: no such app", name)
+			http.Error(w, "no such app", http.StatusInternalServerError)
+
+			return app
+		}
+
+		if !app.CanRedirectTo(redirectURI) {
+			log.Println("login: cannot redirect to specified URI:", redirectURI)
+			http.Error(w, "no such app", http.StatusInternalServerError)
+
+			return app
+		}
+
+		return app
+	}
+
+	redirectSuccess := func(w http.ResponseWriter, r *http.Request, app *config.App, email string, redirectURI *url.URL) {
+		query := redirectURI.Query()
+		query.Add("email", email)
+		query.Add("verify", string(app.HashWithSecret([]byte(email))))
+		redirectURI.RawQuery = query.Encode()
+
+		http.Redirect(w, r, redirectURI.String(), http.StatusFound)
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
+			var (
+				application    = r.FormValue("application")
+				redirectURI, _ = url.Parse(r.FormValue("redirect_uri"))
+				wasProblem     = r.FormValue("problem")
+			)
+
+			app := getApp(w, r, application, redirectURI.String())
+			if app == nil {
+				return
+			}
+
+			if email, err := store.Get(r); err == nil {
+				redirectSuccess(w, r, app, email, redirectURI)
+				return
+			}
+
 			loginTmpl.Execute(w, loginCtx{
-				Application: r.FormValue("application"),
+				Application: application,
 				Token:       nosurf.Token(r),
-				RedirectURI: r.FormValue("redirect_uri"),
-				WasProblem:  r.FormValue("problem") != "",
+				RedirectURI: redirectURI.String(),
+				WasProblem:  wasProblem != "",
 			})
 			return
 		}
@@ -73,12 +119,14 @@ func Login(conf *config.Config) http.Handler {
 				redirectURI, _ = url.Parse(r.PostFormValue("redirect_uri"))
 			)
 
-			redirectHere := func() {
+			redirectHere := func(ok bool) {
 				here := r.URL
 				query := url.Values{}
 				query.Add("application", application)
 				query.Add("redirect_uri", redirectURI.String())
-				query.Add("problem", "yes")
+				if !ok {
+					query.Add("problem", "yes")
+				}
 				here.RawQuery = query.Encode()
 
 				http.Redirect(w, r, here.String(), http.StatusFound)
@@ -87,35 +135,28 @@ func Login(conf *config.Config) http.Handler {
 			user := conf.GetUser(email)
 			if user == nil {
 				log.Println("login: no such user", email)
-				redirectHere()
+				redirectHere(false)
 				return
 			}
 
-			app := conf.GetApp(application)
+			app := getApp(w, r, application, redirectURI.String())
 			if app == nil {
-				log.Println("login: no such app", application)
-				http.Error(w, "no such app", http.StatusInternalServerError)
-				return
-			}
-
-			if !app.CanRedirectTo(redirectURI.String()) {
-				log.Println("login: cannot redirect to specified URI:", redirectURI.String())
-				http.Error(w, "cannot redirect to URI", http.StatusInternalServerError)
 				return
 			}
 
 			if !user.IsPassword(pass) {
 				log.Println("login: password incorrect", email)
-				redirectHere()
+				redirectHere(false)
 				return
 			}
 
-			query := redirectURI.Query()
-			query.Add("email", email)
-			query.Add("verify", string(app.HashWithSecret([]byte(email))))
-			redirectURI.RawQuery = query.Encode()
+			if err := store.Set(w, email); err != nil {
+				log.Println("login: could not set cookie:", err)
+				redirectHere(false)
+				return
+			}
 
-			http.Redirect(w, r, redirectURI.String(), http.StatusFound)
+			redirectHere(true)
 			return
 		}
 

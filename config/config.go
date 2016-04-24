@@ -13,7 +13,8 @@ func Read(path string) (*Config, error) {
 }
 
 type Config struct {
-	path  string
+	path string
+
 	Apps  []*App  `toml:"app"`
 	Users []*User `toml:"user"`
 }
