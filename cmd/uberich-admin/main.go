@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"hawx.me/code/uberich/config"
 )
 
@@ -93,16 +91,10 @@ func main() {
 			return
 		}
 
-		pass, err := bcrypt.GenerateFromPassword([]byte(flag.Arg(2)), -1)
-		if err != nil {
-			fmt.Println("set-user:", err)
-			return
-		}
-
 		user := &config.User{
 			Email: flag.Arg(1),
-			Hash:  string(pass),
 		}
+		user.SetPassword(flag.Arg(2))
 
 		conf.SetUser(user)
 

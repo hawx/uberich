@@ -141,6 +141,7 @@ func Login(conf *config.Config, store *cookies.Store) http.Handler {
 
 			app := getApp(w, r, application, redirectURI.String())
 			if app == nil {
+				redirectHere(false)
 				return
 			}
 

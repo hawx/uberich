@@ -2,17 +2,22 @@ package cookies
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gorilla/securecookie"
 )
 
 type Store struct {
-	store *securecookie.SecureCookie
+	domain string
+	secure bool
+	store  *securecookie.SecureCookie
 }
 
-func New(hashKey []byte, blockKey []byte) *Store {
+func New(domain string, secure bool, hashKey, blockKey []byte) *Store {
 	return &Store{
-		store: securecookie.New(hashKey, blockKey),
+		domain: domain,
+		secure: secure,
+		store:  securecookie.New(hashKey, blockKey),
 	}
 }
 
@@ -23,13 +28,26 @@ func (s *Store) Set(w http.ResponseWriter, email string) error {
 			Name:     "uberich",
 			Value:    encoded,
 			Path:     "/",
-			MaxAge:   3600 * 8, // 8 hours
+			Domain:   s.domain,
+			Expires:  time.Now().UTC().Add(8 * 60 * time.Minute),
 			HttpOnly: true,
+			Secure:   s.secure,
 		}
 		http.SetCookie(w, cookie)
 	}
 
 	return err
+}
+
+func (s *Store) Unset(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:    "uberich",
+		Value:   "",
+		Path:    "/",
+		Domain:  s.domain,
+		Expires: time.Now().UTC().Add(60 * time.Minute),
+		Secure:  s.secure,
+	})
 }
 
 func (s *Store) Get(r *http.Request) (string, error) {

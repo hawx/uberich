@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 
 	"github.com/BurntSushi/toml"
@@ -17,6 +18,20 @@ type Config struct {
 
 	Apps  []*App  `toml:"app"`
 	Users []*User `toml:"user"`
+
+	Domain   string `toml:"domain"`
+	Secure   bool   `toml:"secure"`
+	HashKey  string `toml:"hashKey"`
+	BlockKey string `toml:"blockKey"`
+}
+
+func (c *Config) Keys() (hashKey, blockKey []byte, err error) {
+	hashKey, err = base64.StdEncoding.DecodeString(c.HashKey)
+	if err != nil {
+		return
+	}
+	blockKey, err = base64.StdEncoding.DecodeString(c.BlockKey)
+	return
 }
 
 func (c *Config) GetApp(name string) *App {

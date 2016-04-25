@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"flag"
 	"log"
 	"net/http"
@@ -25,14 +24,15 @@ func main() {
 
 	conf, err := config.Read(*settingsPath)
 	if err != nil {
-		log.Println("toml:", err)
+		log.Println("config:", err)
 		return
 	}
 
-	// Hash keys should be at least 32 bytes long
-	hashKey, _ := base64.StdEncoding.DecodeString("dCTDOQl23gR+f4kLIPHTo6rqo7QmzVyhvJ9+nIMv3jo=")
-	blockKey, _ := base64.StdEncoding.DecodeString("dCTDOQl23gR+f4kLIPHTo6rqo7QmzVyhvJ9+nIMv3jo=")
-	store := cookies.New(hashKey, blockKey)
+	hashKey, blockKey, err := conf.Keys()
+	if err != nil {
+		log.Println("config:", err)
+	}
+	store := cookies.New(conf.Domain, conf.Secure, hashKey, blockKey)
 
 	http.Handle("/login", nosurf.New(web.Login(conf, store)))
 	http.Handle("/change-password", nosurf.New(web.ChangePassword(conf, store)))

@@ -2,6 +2,7 @@ package web
 
 import (
 	"html/template"
+	"log"
 	"net/http"
 
 	"github.com/justinas/nosurf"
@@ -44,6 +45,12 @@ type changePasswordCtx struct {
 
 func ChangePassword(conf *config.Config, store *cookies.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		email, err := store.Get(r)
+		if err != nil {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+
 		if r.Method == "GET" {
 			changePasswordTmpl.Execute(w, changePasswordCtx{
 				Token: nosurf.Token(r),
@@ -62,6 +69,26 @@ func ChangePassword(conf *config.Config, store *cookies.Store) http.Handler {
 				return
 			}
 
+			user := conf.GetUser(email)
+			if user == nil {
+				// This is impossible, really. Does it need checking?
+				http.Redirect(w, r, "/login", http.StatusFound)
+				return
+			}
+
+			if err := user.SetPassword(pass); err != nil {
+				log.Println("change-password:", err)
+				return
+			}
+
+			conf.SetUser(user)
+
+			if err := conf.Save(); err != nil {
+				log.Println("change-password:", err)
+				return
+			}
+
+			store.Unset(w)
 		}
 	})
 }
