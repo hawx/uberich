@@ -7,24 +7,30 @@ import (
 	"github.com/gorilla/securecookie"
 )
 
-type Store struct {
-	domain string
-	secure bool
-	store  *securecookie.SecureCookie
+type Store interface {
+	Set(w http.ResponseWriter, email string) error
+	Unset(w http.ResponseWriter)
+	Get(r *http.Request) (email string, err error)
 }
 
-func New(domain string, secure bool, hashKey, blockKey []byte) *Store {
-	return &Store{
+type store struct {
+	domain string
+	secure bool
+	cookie *securecookie.SecureCookie
+}
+
+func New(domain string, secure bool, hashKey, blockKey []byte) Store {
+	return &store{
 		domain: domain,
 		secure: secure,
-		store:  securecookie.New(hashKey, blockKey),
+		cookie: securecookie.New(hashKey, blockKey),
 	}
 }
 
-func (s *Store) Set(w http.ResponseWriter, email string) error {
-	encoded, err := s.store.Encode("uberich", email)
+func (s *store) Set(w http.ResponseWriter, email string) error {
+	encoded, err := s.cookie.Encode("uberich", email)
 	if err == nil {
-		cookie := &http.Cookie{
+		http.SetCookie(w, &http.Cookie{
 			Name:     "uberich",
 			Value:    encoded,
 			Path:     "/",
@@ -32,14 +38,13 @@ func (s *Store) Set(w http.ResponseWriter, email string) error {
 			Expires:  time.Now().UTC().Add(8 * 60 * time.Minute),
 			HttpOnly: true,
 			Secure:   s.secure,
-		}
-		http.SetCookie(w, cookie)
+		})
 	}
 
 	return err
 }
 
-func (s *Store) Unset(w http.ResponseWriter) {
+func (s *store) Unset(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:    "uberich",
 		Value:   "",
@@ -50,14 +55,14 @@ func (s *Store) Unset(w http.ResponseWriter) {
 	})
 }
 
-func (s *Store) Get(r *http.Request) (string, error) {
+func (s *store) Get(r *http.Request) (string, error) {
 	cookie, err := r.Cookie("uberich")
 	if err != nil {
 		return "", err
 	}
 
 	var value string
-	if err = s.store.Decode("uberich", cookie.Value, &value); err != nil {
+	if err = s.cookie.Decode("uberich", cookie.Value, &value); err != nil {
 		return "", err
 	}
 

@@ -45,22 +45,25 @@ func (s emailStore) Set(w http.ResponseWriter, r *http.Request, email string) {
 	session.Save(r, w)
 }
 
-func Client(application, uberichURL, secret string, store Store) *client {
-	u, _ := url.Parse(uberichURL)
+func Client(appName, appURL, uberichURL, secret string, store Store) *client {
+	appU, _ := url.Parse(appURL)
+	uberichU, _ := url.Parse(uberichURL)
 
 	return &client{
-		application: application,
-		uberichURL:  u,
-		secret:      secret,
-		store:       store,
+		appName:    appName,
+		appURL:     appU,
+		uberichURL: uberichU,
+		secret:     secret,
+		store:      store,
 	}
 }
 
 type client struct {
-	application string
-	uberichURL  *url.URL
-	secret      string
-	store       Store
+	appName    string
+	appURL     *url.URL
+	uberichURL *url.URL
+	secret     string
+	store      Store
 }
 
 func (c *client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
@@ -70,9 +73,9 @@ func (c *client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
 	return hmac.Equal(verifyMAC, expectedMAC)
 }
 
-// signInURI is the the path to this handler, redirectURI is the path to
-// redirect on successful sign-ins.
-func (c *client) SignIn(signInURI, redirectURI string) http.Handler {
+// SignIn returns a handler that prompts the user to sign-in with uberich, on
+// success they will be redirected to redirectURI.
+func (c *client) SignIn(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := r.FormValue("email"); email != "" {
 			verifyMAC := r.FormValue("verify")
@@ -86,17 +89,20 @@ func (c *client) SignIn(signInURI, redirectURI string) http.Handler {
 			return
 		}
 
+		redirectURI, _ := c.appURL.Parse(r.URL.Path)
+
 		u, _ := c.uberichURL.Parse("login")
 		q := u.Query()
-		q.Add("redirect_uri", signInURI)
-		q.Add("application", c.application)
+		q.Add("redirect_uri", redirectURI.String())
+		q.Add("application", c.appName)
 		u.RawQuery = q.Encode()
 
 		http.Redirect(w, r, u.String(), http.StatusFound)
 	})
 }
 
-// redirectURI is the path to redirect to after successful sign-out.
+// SignOut returns a handler that removes the session cookie for the currently
+// signed-in user. It then redirects to redirectURI.
 func (c *client) SignOut(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c.store.Set(w, r, "")
@@ -104,10 +110,14 @@ func (c *client) SignOut(redirectURI string) http.Handler {
 	})
 }
 
-func (c *client) Protect(handler http.Handler) http.Handler {
+// Protect takes two handlers, the first will be used if an entry exists in the
+// store. Otherwise the second handler is used.
+func (c *client) Protect(handler, errHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := c.store.Get(r); email != "" {
 			handler.ServeHTTP(w, r)
+		} else {
+			errHandler.ServeHTTP(w, r)
 		}
 	})
 }

@@ -43,7 +43,7 @@ type changePasswordCtx struct {
 	Token string
 }
 
-func ChangePassword(conf *config.Config, store *cookies.Store) http.Handler {
+func ChangePassword(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		email, err := store.Get(r)
 		if err != nil {
@@ -51,14 +51,13 @@ func ChangePassword(conf *config.Config, store *cookies.Store) http.Handler {
 			return
 		}
 
-		if r.Method == "GET" {
+		switch r.Method {
+		case "GET":
 			changePasswordTmpl.Execute(w, changePasswordCtx{
 				Token: nosurf.Token(r),
 			})
-			return
-		}
 
-		if r.Method == "POST" {
+		case "POST":
 			var (
 				pass    = r.PostFormValue("pass")
 				confirm = r.PostFormValue("pass2") == pass
@@ -77,18 +76,21 @@ func ChangePassword(conf *config.Config, store *cookies.Store) http.Handler {
 			}
 
 			if err := user.SetPassword(pass); err != nil {
-				log.Println("change-password:", err)
+				logger.Println("change-password:", err)
 				return
 			}
 
 			conf.SetUser(user)
 
 			if err := conf.Save(); err != nil {
-				log.Println("change-password:", err)
+				logger.Println("change-password:", err)
 				return
 			}
 
 			store.Unset(w)
+
+		default:
+			w.WriteHeader(405)
 		}
 	})
 }
