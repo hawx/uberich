@@ -140,6 +140,7 @@ func Login(conf *config.Config, store cookies.Store, logger *log.Logger) http.Ha
 
 			app := getApp(w, application, redirectURI.String())
 			if app == nil {
+				logger.Println("login: no such app", app)
 				redirectHere(false)
 				return
 			}

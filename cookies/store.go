@@ -1,6 +1,7 @@
 package cookies
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -64,6 +65,10 @@ func (s *store) Get(r *http.Request) (string, error) {
 	var value string
 	if err = s.cookie.Decode("uberich", cookie.Value, &value); err != nil {
 		return "", err
+	}
+
+	if value == "" {
+		return "", errors.New("invalid user")
 	}
 
 	return value, nil
