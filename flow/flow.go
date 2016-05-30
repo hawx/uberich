@@ -1,9 +1,4 @@
-// Package flow implements the client flow of uberichs authentication protocol.
-//
-// It exposes two types:
-// - a store which simply wraps a cookie jar; and
-// - a client which provides handlers that implement sign-in/out and protection.
-//
+// Package flow implements the client flow of uberich's authentication protocol.
 package flow
 
 import (
