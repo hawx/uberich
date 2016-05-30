@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/justinas/nosurf"
+	"hawx.me/code/mux"
 	"hawx.me/code/uberich/config"
 	"hawx.me/code/uberich/cookies"
 )
@@ -61,113 +62,123 @@ func redirectWithParams(w http.ResponseWriter, r *http.Request, u *url.URL, para
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
-// Login handles requests for a user to verify their identity. It displays and
-// handles a standard login form.
-func Login(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
-	getApp := func(w http.ResponseWriter, name, redirectURI string) *config.App {
-		app := conf.GetApp(name)
+type loginHandler struct {
+	conf   *config.Config
+	store  cookies.Store
+	logger *log.Logger
+}
 
-		if app == nil {
-			logger.Println("login: no such app", name)
-			http.Error(w, "no such app", http.StatusInternalServerError)
+func (h *loginHandler) getApp(w http.ResponseWriter, name, redirectURI string) *config.App {
+	app := h.conf.GetApp(name)
 
-		} else if !app.CanRedirectTo(redirectURI) {
-			logger.Println("login: cannot redirect to specified URI:", redirectURI)
-			http.Error(w, "no such app", http.StatusInternalServerError)
-		}
+	if app == nil {
+		h.logger.Println("login: no such app", name)
+		http.Error(w, "no such app", http.StatusInternalServerError)
 
-		return app
+	} else if !app.CanRedirectTo(redirectURI) {
+		h.logger.Println("login: cannot redirect to specified URI:", redirectURI)
+		http.Error(w, "no such app", http.StatusInternalServerError)
 	}
 
-	redirectSuccess := func(w http.ResponseWriter, r *http.Request, app *config.App, email string, redirectURI *url.URL) {
+	return app
+}
+
+func (h *loginHandler) Get(w http.ResponseWriter, r *http.Request) {
+	var (
+		application      = r.FormValue("application")
+		redirectURI, err = url.Parse(r.FormValue("redirect_uri"))
+		wasProblem       = r.FormValue("problem")
+	)
+
+	if err != nil {
+		h.logger.Println("login: could not parse redirect_uri")
+		http.Error(w, "could not parse redirect_uri", http.StatusInternalServerError)
+		return
+	}
+
+	app := h.getApp(w, application, redirectURI.String())
+	if app == nil {
+		return
+	}
+
+	if email, err := h.store.Get(r); err == nil {
 		redirectWithParams(w, r, redirectURI, map[string]string{
 			"email":  email,
 			"verify": string(app.HashWithSecret([]byte(email))),
 		})
+
+		return
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "GET":
-			var (
-				application      = r.FormValue("application")
-				redirectURI, err = url.Parse(r.FormValue("redirect_uri"))
-				wasProblem       = r.FormValue("problem")
-			)
-
-			if err != nil {
-				logger.Println("login: could not parse redirect_uri")
-				http.Error(w, "could not parse redirect_uri", http.StatusInternalServerError)
-				return
-			}
-
-			app := getApp(w, application, redirectURI.String())
-			if app == nil {
-				return
-			}
-
-			if email, err := store.Get(r); err == nil {
-				redirectSuccess(w, r, app, email, redirectURI)
-				return
-			}
-
-			loginTmpl.Execute(w, loginCtx{
-				Application: application,
-				Token:       nosurf.Token(r),
-				RedirectURI: redirectURI.String(),
-				WasProblem:  wasProblem != "",
-			})
-
-		case "POST":
-			var (
-				email          = r.PostFormValue("email")
-				pass           = r.PostFormValue("pass")
-				application    = r.PostFormValue("application")
-				redirectURI, _ = url.Parse(r.PostFormValue("redirect_uri"))
-			)
-
-			redirectHere := func(ok bool) {
-				params := map[string]string{
-					"application":  application,
-					"redirect_uri": redirectURI.String(),
-				}
-				if !ok {
-					params["problem"] = "yes"
-				}
-
-				redirectWithParams(w, r, r.URL, params)
-			}
-
-			app := getApp(w, application, redirectURI.String())
-			if app == nil {
-				logger.Println("login: no such app", app)
-				redirectHere(false)
-				return
-			}
-
-			user := conf.GetUser(email)
-			if user == nil {
-				logger.Println("login: no such user", email)
-				redirectHere(false)
-				return
-			}
-
-			if !user.IsPassword(pass) {
-				logger.Println("login: password incorrect", email)
-				redirectHere(false)
-				return
-			}
-
-			if err := store.Set(w, email); err != nil {
-				logger.Println("login: could not set cookie:", err)
-				redirectHere(false)
-				return
-			}
-
-			redirectHere(true)
-
-		default:
-			w.WriteHeader(405)
-		}
+	loginTmpl.Execute(w, loginCtx{
+		Application: application,
+		Token:       nosurf.Token(r),
+		RedirectURI: redirectURI.String(),
+		WasProblem:  wasProblem != "",
 	})
+}
+
+func (h *loginHandler) Post(w http.ResponseWriter, r *http.Request) {
+	var (
+		email            = r.PostFormValue("email")
+		pass             = r.PostFormValue("pass")
+		application      = r.PostFormValue("application")
+		redirectURI, err = url.Parse(r.PostFormValue("redirect_uri"))
+	)
+
+	if err != nil {
+		h.logger.Println("login: could not parse redirect_uri")
+		http.Error(w, "could not parse redirect_uri", http.StatusInternalServerError)
+		return
+	}
+
+	redirectHere := func() {
+		redirectWithParams(w, r, r.URL, map[string]string{
+			"application":  application,
+			"redirect_uri": redirectURI.String(),
+			"problem":      "yes",
+		})
+	}
+
+	app := h.getApp(w, application, redirectURI.String())
+	if app == nil {
+		h.logger.Println("login: no such app", app)
+		redirectHere()
+		return
+	}
+
+	user := h.conf.GetUser(email)
+	if user == nil {
+		h.logger.Println("login: no such user", email)
+		redirectHere()
+		return
+	}
+
+	if !user.IsPassword(pass) {
+		h.logger.Println("login: password incorrect", email)
+		redirectHere()
+		return
+	}
+
+	if err := h.store.Set(w, email); err != nil {
+		h.logger.Println("login: could not set cookie:", err)
+		redirectHere()
+		return
+	}
+
+	redirectWithParams(w, r, r.URL, map[string]string{
+		"application":  application,
+		"redirect_uri": redirectURI.String(),
+	})
+}
+
+// Login handles requests for a user to verify their identity. It displays and
+// handles a standard login form.
+func Login(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
+	handler := &loginHandler{conf, store, logger}
+
+	return mux.Method{
+		"GET":  http.HandlerFunc(handler.Get),
+		"POST": http.HandlerFunc(handler.Post),
+	}
 }
