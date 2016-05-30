@@ -7,6 +7,7 @@ import (
 
 	"github.com/justinas/nosurf"
 
+	"hawx.me/code/mux"
 	"hawx.me/code/uberich/config"
 	"hawx.me/code/uberich/cookies"
 )
@@ -43,54 +44,67 @@ type changePasswordCtx struct {
 	Token string
 }
 
-func ChangePassword(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		email, err := store.Get(r)
-		if err != nil {
-			http.Redirect(w, r, "/login", http.StatusFound)
-			return
-		}
+type changePasswordHandler struct {
+	conf   *config.Config
+	store  cookies.Store
+	logger *log.Logger
+}
 
-		switch r.Method {
-		case "GET":
-			changePasswordTmpl.Execute(w, changePasswordCtx{
-				Token: nosurf.Token(r),
-			})
+func (h *changePasswordHandler) Get(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.store.Get(r); err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
 
-		case "POST":
-			var (
-				pass    = r.PostFormValue("pass")
-				confirm = r.PostFormValue("pass2") == pass
-			)
-
-			if !confirm {
-				http.Redirect(w, r, r.URL.Path, http.StatusFound)
-				return
-			}
-
-			user := conf.GetUser(email)
-			if user == nil {
-				// This is impossible, really. Does it need checking?
-				http.Redirect(w, r, "/login", http.StatusFound)
-				return
-			}
-
-			if err := user.SetPassword(pass); err != nil {
-				logger.Println("change-password:", err)
-				return
-			}
-
-			conf.SetUser(user)
-
-			if err := conf.Save(); err != nil {
-				logger.Println("change-password:", err)
-				return
-			}
-
-			store.Unset(w)
-
-		default:
-			w.WriteHeader(405)
-		}
+	changePasswordTmpl.Execute(w, changePasswordCtx{
+		Token: nosurf.Token(r),
 	})
+}
+
+func (h *changePasswordHandler) Post(w http.ResponseWriter, r *http.Request) {
+	email, err := h.store.Get(r)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	var (
+		pass    = r.PostFormValue("pass")
+		confirm = r.PostFormValue("pass2") == pass
+	)
+
+	if !confirm {
+		http.Redirect(w, r, r.URL.Path, http.StatusFound)
+		return
+	}
+
+	user := h.conf.GetUser(email)
+	if user == nil {
+		// This is impossible, really. Does it need checking?
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+
+	if err := user.SetPassword(pass); err != nil {
+		h.logger.Println("change-password:", err)
+		return
+	}
+
+	h.conf.SetUser(user)
+
+	if err := h.conf.Save(); err != nil {
+		h.logger.Println("change-password:", err)
+		return
+	}
+
+	h.store.Unset(w)
+}
+
+func ChangePassword(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
+	handler := &changePasswordHandler{conf, store, logger}
+
+	return mux.Method{
+		"GET":  http.HandlerFunc(handler.Get),
+		"POST": http.HandlerFunc(handler.Post),
+	}
 }
