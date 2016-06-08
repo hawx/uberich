@@ -4,14 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
-	"github.com/gorilla/context"
-	"github.com/justinas/nosurf"
 	"hawx.me/code/serve"
 	"hawx.me/code/uberich/config"
-	"hawx.me/code/uberich/cookies"
 	"hawx.me/code/uberich/web"
 )
 
@@ -70,17 +66,11 @@ func main() {
 		return
 	}
 
-	hashKey, blockKey, err := conf.Keys()
+	handler, err := web.New(conf)
 	if err != nil {
 		log.Println("config:", err)
+		return
 	}
-	store := cookies.New(conf.Domain, conf.Secure, hashKey, blockKey)
 
-	logger := log.New(os.Stdout, "", log.LstdFlags)
-
-	http.Handle("/login", nosurf.New(web.Login(conf, store, logger)))
-	http.Handle("/change-password", nosurf.New(web.ChangePassword(conf, store, logger)))
-	http.Handle("/styles.css", web.Styles)
-
-	serve.Serve(*port, *socket, context.ClearHandler(http.DefaultServeMux))
+	serve.Serve(*port, *socket, handler)
 }

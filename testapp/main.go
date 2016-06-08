@@ -36,7 +36,7 @@ func Secret(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	store := uberich.NewStore("COOKIE-SECRETSZ")
-	uberich := uberich.Client("testapp", "http://localhost:3001", "http://localhost:8080", "thisissecret", store)
+	uberich := uberich.NewClient("testapp", "http://localhost:3001", "http://localhost:8080", "thisissecret", store)
 
 	http.HandleFunc("/", Index)
 	http.Handle("/secret", uberich.Protect(

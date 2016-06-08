@@ -40,11 +40,11 @@ func (s emailStore) Set(w http.ResponseWriter, r *http.Request, email string) {
 	session.Save(r, w)
 }
 
-func Client(appName, appURL, uberichURL, secret string, store Store) *client {
+func NewClient(appName, appURL, uberichURL, secret string, store Store) *Client {
 	appU, _ := url.Parse(appURL)
 	uberichU, _ := url.Parse(uberichURL)
 
-	return &client{
+	return &Client{
 		appName:    appName,
 		appURL:     appU,
 		uberichURL: uberichU,
@@ -53,7 +53,7 @@ func Client(appName, appURL, uberichURL, secret string, store Store) *client {
 	}
 }
 
-type client struct {
+type Client struct {
 	appName    string
 	appURL     *url.URL
 	uberichURL *url.URL
@@ -61,7 +61,7 @@ type client struct {
 	store      Store
 }
 
-func (c *client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
+func (c *Client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
 	mac := hmac.New(sha256.New, []byte(c.secret))
 	mac.Write(data)
 	expectedMAC := mac.Sum(nil)
@@ -70,7 +70,7 @@ func (c *client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
 
 // SignIn returns a handler that prompts the user to sign-in with uberich, on
 // success they will be redirected to redirectURI.
-func (c *client) SignIn(redirectURI string) http.Handler {
+func (c *Client) SignIn(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := r.FormValue("email"); email != "" {
 			verifyMAC := r.FormValue("verify")
@@ -98,7 +98,7 @@ func (c *client) SignIn(redirectURI string) http.Handler {
 
 // SignOut returns a handler that removes the session cookie for the currently
 // signed-in user. It then redirects to redirectURI.
-func (c *client) SignOut(redirectURI string) http.Handler {
+func (c *Client) SignOut(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c.store.Set(w, r, "")
 		http.Redirect(w, r, redirectURI, http.StatusFound)
@@ -107,7 +107,7 @@ func (c *client) SignOut(redirectURI string) http.Handler {
 
 // Protect takes two handlers, the first will be used if an entry exists in the
 // store. Otherwise the second handler is used.
-func (c *client) Protect(handler, errHandler http.Handler) http.Handler {
+func (c *Client) Protect(handler, errHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := c.store.Get(r); email != "" {
 			handler.ServeHTTP(w, r)
