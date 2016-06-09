@@ -4,6 +4,7 @@ package flow
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"log"
 	"net/http"
 	"net/url"
@@ -74,7 +75,9 @@ func (c *Client) SignIn(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := r.FormValue("email"); email != "" {
 			verifyMAC := r.FormValue("verify")
-			if !c.wasHashedWithSecret([]byte(email), []byte(verifyMAC)) {
+			decodedMAC, _ := base64.URLEncoding.DecodeString(verifyMAC)
+
+			if !c.wasHashedWithSecret([]byte(email), decodedMAC) {
 				log.Println("sign-in: response from unverified source")
 				return
 			}
