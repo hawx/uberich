@@ -26,12 +26,12 @@ $ uberich
 ...
 ```
 
-Now `testApp` can integrate with uberich using the `flow` package.
+Now `testApp` can integrate with uberich using the `uberich` package.
 
 ```go
 import (
   "github.com/gorilla/context"
-  uberich "hawx.me/code/uberich/flow"
+  "hawx.me/code/uberich"
 )
 
 func main() {

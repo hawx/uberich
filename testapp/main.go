@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/context"
-	uberich "hawx.me/code/uberich/flow"
+	"hawx.me/code/uberich"
 )
 
 func Index(w http.ResponseWriter, r *http.Request) {

@@ -1,76 +1,121 @@
-package main
+// Package uberich implements the client flow of uberich's authentication protocol.
+package uberich
 
 import (
-	"flag"
-	"fmt"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"log"
-	"os"
+	"net/http"
+	"net/url"
 
-	"hawx.me/code/serve"
-	"hawx.me/code/uberich/config"
-	"hawx.me/code/uberich/web"
+	"github.com/gorilla/sessions"
 )
 
-const help = `Usage: uberich [options]
+type Store interface {
+	Set(w http.ResponseWriter, r *http.Request, email string)
+	Get(r *http.Request) string
+}
 
-  Uberich is a login server. It uses a simple config file for storage of
-  settings and understands the concept of users and apps.
+type emailStore struct {
+	store sessions.Store
+}
 
-  A user is registered by email address and has a password.
-  An app has a name, a URI and a secret.
+func NewStore(secret string) Store {
+	return &emailStore{sessions.NewCookieStore([]byte(secret))}
+}
 
-  See the correspoding hawx.me/code/uberich/flow package that implements
-  helpers for integrating clients with uberich.
+func (s emailStore) Get(r *http.Request) string {
+	session, _ := s.store.Get(r, "session")
 
- OPTIONS
-
-   --settings PATH    # Read settings from path (default: './settings.toml')
-   --port PORT        # Serve on given port (default: '8080')
-   --socket PATH      # Serve at given socket, instead
-
- SETTINGS
-
-   The settings file is written in TOML and must contain at least the following
-
-     # the domain uberich is running at
-     domain = "my.example.com"
-
-     # whether to use secure cookies, only set false in local development
-     secure = true
-
-     # 32 or 64 byte, in standard base64, used to authenticate the cookie
-     # using HMAC
-     hashKey = "..."
-
-     # Encryption key for the cookie, the length corresponds to the algorithm
-     # used: for AES, used by default, valid lengths are 16, 24, or 32 bytes
-     # to select AES-128, AES-192, or AES-256. Given in standard base64.
-     blockKey = "..."
-
-   To add users and apps see uberich/cmd/uberich-admin.
-`
-
-func main() {
-	flag.Usage = func() { fmt.Fprint(os.Stderr, help) }
-
-	var (
-		settingsPath = flag.String("settings", "./settings.toml", "")
-		port         = flag.String("port", "8080", "")
-		socket       = flag.String("socket", "", "")
-	)
-	flag.Parse()
-
-	conf, err := config.Read(*settingsPath)
-	if err != nil {
-		log.Println("config:", err)
-		return
+	if v, ok := session.Values["email"].(string); ok {
+		return v
 	}
 
-	handler, err := web.New(conf)
-	if err != nil {
-		log.Println("config:", err)
-		return
-	}
+	return ""
+}
 
-	serve.Serve(*port, *socket, handler)
+func (s emailStore) Set(w http.ResponseWriter, r *http.Request, email string) {
+	session, _ := s.store.Get(r, "session")
+	session.Values["email"] = email
+	session.Save(r, w)
+}
+
+func NewClient(appName, appURL, uberichURL, secret string, store Store) *Client {
+	appU, _ := url.Parse(appURL)
+	uberichU, _ := url.Parse(uberichURL)
+
+	return &Client{
+		appName:    appName,
+		appURL:     appU,
+		uberichURL: uberichU,
+		secret:     secret,
+		store:      store,
+	}
+}
+
+type Client struct {
+	appName    string
+	appURL     *url.URL
+	uberichURL *url.URL
+	secret     string
+	store      Store
+}
+
+func (c *Client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
+	mac := hmac.New(sha256.New, []byte(c.secret))
+	mac.Write(data)
+	expectedMAC := mac.Sum(nil)
+	return hmac.Equal(verifyMAC, expectedMAC)
+}
+
+// SignIn returns a handler that prompts the user to sign-in with uberich, on
+// success they will be redirected to redirectURI.
+func (c *Client) SignIn(redirectURI string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if email := r.FormValue("email"); email != "" {
+			verifyMAC := r.FormValue("verify")
+			decodedMAC, _ := base64.URLEncoding.DecodeString(verifyMAC)
+
+			if !c.wasHashedWithSecret([]byte(email), decodedMAC) {
+				log.Println("sign-in: response from unverified source")
+				return
+			}
+
+			c.store.Set(w, r, email)
+			http.Redirect(w, r, redirectURI, http.StatusFound)
+			return
+		}
+
+		redirectURI, _ := c.appURL.Parse(r.URL.Path)
+
+		u, _ := c.uberichURL.Parse("login")
+		q := u.Query()
+		q.Add("redirect_uri", redirectURI.String())
+		q.Add("application", c.appName)
+		u.RawQuery = q.Encode()
+
+		http.Redirect(w, r, u.String(), http.StatusFound)
+	})
+}
+
+// SignOut returns a handler that removes the session cookie for the currently
+// signed-in user. It then redirects to redirectURI.
+func (c *Client) SignOut(redirectURI string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c.store.Set(w, r, "")
+		http.Redirect(w, r, redirectURI, http.StatusFound)
+	})
+}
+
+// Protect takes two handlers, the first will be used if an entry exists in the
+// store. Otherwise the second handler is used.
+func (c *Client) Protect(handler, errHandler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if email := c.store.Get(r); email != "" {
+			handler.ServeHTTP(w, r)
+		} else {
+			errHandler.ServeHTTP(w, r)
+		}
+	})
 }
