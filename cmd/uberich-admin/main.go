@@ -44,7 +44,7 @@ func main() {
 	switch flag.Arg(0) {
 	case "list-apps":
 		for _, app := range conf.Apps {
-			fmt.Printf("%s uri=%s secret=%s\n", app.Name, app.URI, app.Secret)
+			fmt.Printf("%s uri='%s' secret='%s'\n", app.Name, app.URI, app.Secret)
 		}
 
 	case "set-app":
@@ -66,7 +66,7 @@ func main() {
 			return
 		}
 
-		fmt.Printf("%s uri=%s secret=%s\n", app.Name, app.URI, app.Secret)
+		fmt.Printf("%s uri='%s' secret='%s'\n", app.Name, app.URI, app.Secret)
 
 	case "remove-app":
 		if len(flag.Args()) < 2 {

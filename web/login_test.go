@@ -87,7 +87,7 @@ func TestLogin(t *testing.T) {
 		URI:    successServer.URL,
 		Secret: "i have secrets",
 	}
-	hmac := "n\xf3\x18D\xa7\r\xc6b\x87y\xd7\xca\a\x80T\xd9s\xb9`b\n\xa2ly\xd8\xedN\xddca\xb8<"
+	hmac := "bvMYRKcNxmKHedfKB4BU2XO5YGIKomx52O1O3WNhuDw="
 
 	loginServer := httptest.NewServer(Login(conf(testApp), &fakeStore{email}, discardLogger))
 	defer loginServer.Close()
@@ -177,7 +177,7 @@ func TestLoginWhenPost(t *testing.T) {
 		URI:    successServer.URL,
 		Secret: "i have secrets",
 	}
-	hmac := "n\xf3\x18D\xa7\r\xc6b\x87y\xd7\xca\a\x80T\xd9s\xb9`b\n\xa2ly\xd8\xedN\xddca\xb8<"
+	hmac := "bvMYRKcNxmKHedfKB4BU2XO5YGIKomx52O1O3WNhuDw="
 
 	conf := conf(testApp)
 	addUser(conf, email, password)

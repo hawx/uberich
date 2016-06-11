@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/base64"
 	"html/template"
 	"log"
 	"net/http"
@@ -104,7 +105,7 @@ func (h *loginHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if email, err := h.store.Get(r); err == nil {
 		redirectWithParams(w, r, redirectURI, map[string]string{
 			"email":  email,
-			"verify": string(app.HashWithSecret([]byte(email))),
+			"verify": base64.URLEncoding.EncodeToString(app.HashWithSecret([]byte(email))),
 		})
 
 		return

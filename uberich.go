@@ -74,10 +74,12 @@ func (c *Client) wasHashedWithSecret(data []byte, verifyMAC []byte) bool {
 func (c *Client) SignIn(redirectURI string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if email := r.FormValue("email"); email != "" {
-			verifyMAC := r.FormValue("verify")
-			decodedMAC, _ := base64.URLEncoding.DecodeString(verifyMAC)
+			verifyMAC, err := base64.URLEncoding.DecodeString(r.FormValue("verify"))
+			if err != nil {
+				log.Println(err)
+			}
 
-			if !c.wasHashedWithSecret([]byte(email), decodedMAC) {
+			if !c.wasHashedWithSecret([]byte(email), verifyMAC) {
 				log.Println("sign-in: response from unverified source")
 				return
 			}
