@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/sessions"
-
 	"hawx.me/code/assert"
 )
 
@@ -42,12 +40,7 @@ func TestSignOut(t *testing.T) {
 
 	select {
 	case r := <-redirectCh:
-		sessionsStore := sessions.NewCookieStore([]byte(cookieSecret))
-		session, _ := sessionsStore.Get(r, "session")
-		value, ok := session.Values["email"].(string)
-
-		assert.True(ok)
-		assert.Equal("", value)
+		assert.Equal("", client.CurrentUser(r))
 
 	case <-time.After(time.Second):
 		t.Error("timeout")
@@ -128,12 +121,8 @@ func TestSignInWhenSignedIn(t *testing.T) {
 	case r := <-redirectCh:
 		assert.Equal("/", r.URL.Path)
 
-		sessionsStore := sessions.NewCookieStore([]byte(cookieSecret))
-		session, _ := sessionsStore.Get(r, "session")
-		value, ok := session.Values["email"].(string)
-
-		assert.True(ok)
-		assert.Equal(email, value)
+		user := client.CurrentUser(r)
+		assert.Equal(email, user)
 
 	case <-time.After(time.Second):
 		t.Error("timeout")

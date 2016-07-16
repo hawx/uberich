@@ -121,3 +121,7 @@ func (c *Client) Protect(handler, errHandler http.Handler) http.Handler {
 		}
 	})
 }
+
+func (c *Client) CurrentUser(r *http.Request) string {
+	return c.store.Get(r)
+}
