@@ -89,7 +89,12 @@ func (c *Client) SignIn(redirectURI string) http.Handler {
 			return
 		}
 
-		redirectURI, _ := c.appURL.Parse(r.URL.Path)
+		path := r.URL.Path
+		if len(path) > 0 {
+			path = path[1:]
+		}
+
+		redirectURI, _ := c.appURL.Parse(path)
 
 		u, _ := c.uberichURL.Parse("login")
 		q := u.Query()
