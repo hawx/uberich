@@ -17,6 +17,7 @@ const loginPage = `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -28,7 +29,7 @@ const loginPage = `<!DOCTYPE html>
     <form method="post" action="/login">
       <fieldset>
         <label for="email">Email</label>
-        <input type="text" id="email" name="email" />
+        <input type="text" id="email" name="email" autofocus />
       </fieldset>
 
       <fieldset>

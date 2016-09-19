@@ -63,6 +63,18 @@ input[type=submit] {
     margin: 0 0 2rem;
     display: inline-block;
 }
+
+@media screen and (max-width: 27rem) {
+    body {
+        margin: 3rem 1rem;
+    }
+
+    label {
+        display: block;
+        text-align: left;
+        margin: .5rem 0;
+    }
+}
 `
 
 var Styles = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
