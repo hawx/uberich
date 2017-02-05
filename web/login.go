@@ -9,6 +9,7 @@ import (
 
 	"github.com/justinas/nosurf"
 	"hawx.me/code/mux"
+	"hawx.me/code/uberich/auth"
 	"hawx.me/code/uberich/config"
 	"hawx.me/code/uberich/cookies"
 )
@@ -65,9 +66,10 @@ func redirectWithParams(w http.ResponseWriter, r *http.Request, u *url.URL, para
 }
 
 type loginHandler struct {
-	conf   *config.Config
-	store  cookies.Store
-	logger *log.Logger
+	conf    *config.Config
+	store   cookies.Store
+	logger  *log.Logger
+	checker *auth.Checker
 }
 
 func (h *loginHandler) getApp(w http.ResponseWriter, name, redirectURI string) *config.App {
@@ -149,15 +151,7 @@ func (h *loginHandler) Post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := h.conf.GetUser(email)
-	if user == nil {
-		h.logger.Println("login: no such user", email)
-		redirectHere()
-		return
-	}
-
-	if !user.IsPassword(pass) {
-		h.logger.Println("login: password incorrect", email)
+	if !h.checker.IsAuthorised(email, pass) {
 		redirectHere()
 		return
 	}
@@ -177,7 +171,7 @@ func (h *loginHandler) Post(w http.ResponseWriter, r *http.Request) {
 // Login handles requests for a user to verify their identity. It displays and
 // handles a standard login form.
 func Login(conf *config.Config, store cookies.Store, logger *log.Logger) http.Handler {
-	handler := &loginHandler{conf, store, logger}
+	handler := &loginHandler{conf, store, logger, auth.NewChecker(conf, logger)}
 
 	return mux.Method{
 		"GET":  http.HandlerFunc(handler.Get),
